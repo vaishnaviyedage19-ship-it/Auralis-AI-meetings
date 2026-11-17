@@ -21,7 +21,7 @@ import { healthRouter } from "./routes/health.routes";
 
 const app = express();
 app.disable("x-powered-by");
-app.set("trust proxy", false);
+app.set("trust proxy", 1);
 
 app.use(
   cors({

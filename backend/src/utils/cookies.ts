@@ -7,7 +7,7 @@ export const GUEST_COOKIE = "guest_token";
 function baseOptions(maxAgeMs: number): CookieOptions {
   return {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: env.isProduction ? "none" : "lax",
     secure: env.isProduction,
     path: "/",
     maxAge: maxAgeMs,
