@@ -95,7 +95,7 @@ export class ParticipantAudioStream {
           startSec: Number(payload.startSec ?? 0),
           endSec: Number(payload.endSec ?? payload.startSec ?? 0),
           language: typeof payload.language === "string" ? payload.language : null,
-          replaceId: typeof payload.replaces === "string" ? payload.replaces : null,
+          replaceId: typeof payload.replaceId === "string" ? payload.replaceId : typeof payload.replaces === "string" ? payload.replaces : null,
         });
         return;
       }
