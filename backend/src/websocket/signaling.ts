@@ -96,34 +96,52 @@ type ClientEvent = z.infer<typeof clientEventSchema>;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function authenticateRequest(cookieHeader: string | undefined): AuthContext | null {
-  if (!cookieHeader) return null;
-  const cookies = parseCookieHeader(cookieHeader);
+// CHANGED: one helper that turns a JWT string into an AuthContext.
+function authFromToken(token: string): AuthContext | null {
+  const payload = verifyToken<UserTokenPayload | GuestTokenPayload>(token);
+  if (!payload) return null;
 
-  const userToken = cookies[AUTH_COOKIE];
-  if (userToken) {
-    const payload = verifyToken<UserTokenPayload>(userToken);
-    if (payload?.role === "user" && payload.sub) {
-      return {
-        role: "user",
-        userId: payload.sub,
-        name: payload.name,
-        email: payload.email,
-      };
+  if (payload.role === "user" && payload.sub) {
+    const p = payload as UserTokenPayload;
+    return {
+      role: "user",
+      userId: p.sub,
+      name: p.name,
+      email: p.email,
+    };
+  }
+
+  if (payload.role === "guest" && payload.sub && (payload as GuestTokenPayload).roomId) {
+    const p = payload as GuestTokenPayload;
+    return {
+      role: "guest",
+      guestId: p.sub,
+      name: p.name,
+      roomId: p.roomId,
+    };
+  }
+
+  return null;
+}
+
+// CHANGED: cookies are tried first (old behaviour), then the ?token= query
+// parameter is used as a fallback when the browser blocked the cookie.
+function authenticateRequest(
+  cookieHeader: string | undefined,
+  queryToken?: string | null,
+): AuthContext | null {
+  if (cookieHeader) {
+    const cookies = parseCookieHeader(cookieHeader);
+    for (const candidate of [cookies[AUTH_COOKIE], cookies[GUEST_COOKIE]]) {
+      if (candidate) {
+        const found = authFromToken(candidate);
+        if (found) return found;
+      }
     }
   }
 
-  const guestToken = cookies[GUEST_COOKIE];
-  if (guestToken) {
-    const payload = verifyToken<GuestTokenPayload>(guestToken);
-    if (payload?.role === "guest" && payload.sub && payload.roomId) {
-      return {
-        role: "guest",
-        guestId: payload.sub,
-        name: payload.name,
-        roomId: payload.roomId,
-      };
-    }
+  if (queryToken) {
+    return authFromToken(queryToken);
   }
 
   return null;
@@ -168,7 +186,15 @@ export function attachSignaling(server: HttpServer): WebSocketServer {
   });
 
   wss.on("connection", (socket, request) => {
-    const auth = authenticateRequest(request.headers.cookie);
+    // CHANGED: read ?token= from the WebSocket URL and pass it along.
+    let queryToken: string | null = null;
+    try {
+      queryToken = new URL(request.url ?? "/", "http://localhost").searchParams.get("token");
+    } catch {
+      queryToken = null;
+    }
+
+    const auth = authenticateRequest(request.headers.cookie, queryToken);
     if (!auth) {
       errorMessage(socket, "UNAUTHORIZED", "Authentication required");
       socket.close(4401, "Unauthorized");

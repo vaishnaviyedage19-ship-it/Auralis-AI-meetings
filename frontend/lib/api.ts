@@ -1,5 +1,11 @@
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
-export const WS_URL = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:5000").replace(/\/$/, "");
+
+export const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/$/, "");
+
+export const WS_URL = (
+  process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:5000"
+).replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -17,16 +23,41 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
 }
 
-/** Fetch wrapper that always sends cookies and normalises backend errors. */
-export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * Fetch wrapper that sends cookies and Bearer authentication
+ * and normalises backend errors.
+ */
+export async function api<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const { body, headers, ...rest } = options;
+
+  const requestHeaders = new Headers(headers);
+
+  if (body !== undefined && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+
+  // Read guest/user token only in the browser.
+  let token: string | null = null;
+
+try {
+  token =
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem("auralis_ws_token")
+      : null;
+} catch {
+  token = null;
+}
+  if (token && !requestHeaders.has("Authorization")) {
+    requestHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
     credentials: "include",
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(headers as Record<string, string> | undefined),
-    },
+    headers: requestHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
@@ -35,7 +66,9 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   const text = await response.text();
+
   let payload: unknown = null;
+
   if (text) {
     try {
       payload = JSON.parse(text);
@@ -46,13 +79,19 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
   if (!response.ok) {
     const message =
-      payload && typeof payload === "object" && "error" in payload
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload
         ? String((payload as { error: unknown }).error)
         : `Request failed (${response.status})`;
+
     const details =
-      payload && typeof payload === "object" && "details" in payload
+      payload &&
+      typeof payload === "object" &&
+      "details" in payload
         ? (payload as { details: unknown }).details
         : undefined;
+
     throw new ApiError(message, response.status, details);
   }
 
@@ -61,12 +100,20 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
 export function iceServers(): RTCIceServer[] {
   const raw = process.env.NEXT_PUBLIC_ICE_SERVERS;
-  if (!raw) return [{ urls: "stun:stun.l.google.com:19302" }];
+
+  if (!raw) {
+    return [{ urls: "stun:stun.l.google.com:19302" }];
+  }
+
   try {
     const parsed = JSON.parse(raw) as RTCIceServer[];
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
   } catch {
-    // fall through to default
+    // Fall through to default.
   }
+
   return [{ urls: "stun:stun.l.google.com:19302" }];
 }

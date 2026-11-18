@@ -43,7 +43,7 @@ import { useAudioCapture } from "@/hooks/useAudioCapture";
 import { useMediaDevices } from "@/hooks/useMediaDevices";
 import { useMeetingTimer } from "@/hooks/useMeetingTimer";
 import { useRecorder, type RecordingOutput } from "@/hooks/useRecorder";
-import { useSignaling, type RoomJoinedPayload } from "@/hooks/useSignaling";
+import { useSignaling, WS_TOKEN_KEY, type RoomJoinedPayload } from "@/hooks/useSignaling";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { api, ApiError } from "@/lib/api";
 import { cn, formatBytes, formatClock, formatDate } from "@/lib/format";
@@ -752,12 +752,27 @@ export function MeetingExperience({
     link.remove();
   };
 
-  const leaveNow = () => {
-    setLeaving(true);
-    teardown("left");
-    setLeaveOpen(false);
-    setLeaving(false);
-  };
+  const leaveNow = async () => {
+  setLeaving(true);
+
+  if (isGuest) {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Continue local cleanup even if the logout request fails.
+    } finally {
+      try {
+        window.sessionStorage.removeItem(WS_TOKEN_KEY);
+      } catch {
+        // Ignore session storage errors.
+      }
+    }
+  }
+
+  teardown("left");
+  setLeaveOpen(false);
+  setLeaving(false);
+};
 
   const endForEveryone = async () => {
     if (!meeting) {

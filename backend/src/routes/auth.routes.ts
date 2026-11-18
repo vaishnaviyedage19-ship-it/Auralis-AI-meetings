@@ -121,6 +121,6 @@ authRouter.post(
       roomId: meeting.roomId,
     });
     setGuestCookie(res, token, durationToMs(env.guestTokenExpiresIn, 12 * 3600_000));
-    res.json({ guest: { name: body.name, roomId: meeting.roomId } });
+    res.json({ guest: { name: body.name, roomId: meeting.roomId }, token });
   },
 );

@@ -55,6 +55,10 @@ const FATAL_CODES = new Set([
   "JOIN_FAILED",
 ]);
 
+// CHANGED: key under which the guest page stores the token returned by
+// POST /api/auth/guest. Must be the same key used on the guest join page.
+export const WS_TOKEN_KEY = "auralis_ws_token";
+
 export function useSignaling(handlers: SignalingHandlers) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
@@ -86,7 +90,18 @@ export function useSignaling(handlers: SignalingHandlers) {
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket(`${WS_URL}/ws`);
+      // CHANGED: send the stored token in the URL so authentication works
+      // even when the browser blocks the cross-site cookie.
+      let token: string | null = null;
+      try {
+        token = typeof window !== "undefined" ? sessionStorage.getItem(WS_TOKEN_KEY) : null;
+      } catch {
+        token = null;
+      }
+      const url = token
+        ? `${WS_URL}/ws?token=${encodeURIComponent(token)}`
+        : `${WS_URL}/ws`;
+      socket = new WebSocket(url);
     } catch {
       setStatus("disconnected");
       return;
